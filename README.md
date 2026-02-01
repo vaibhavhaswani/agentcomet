@@ -273,22 +273,7 @@ repo.log()
 
 ---
 
-## 📁 Project Structure
-
-```
-agentcomet/
-├── agents/          # UAFAgent, AgentResponse
-├── orchestrators/   # AgentOrchestrator, ExecutionEngine
-├── workflows/       # WorkflowBuilder, Templates, Patterns
-├── models/          # LLM providers (Ollama, OpenAI, etc.)
-├── vcs/             # Repository, version control
-├── communication/   # MessageBroker (experimental)
-└── cli.py           # afc command-line tool
-```
-
----
-
-## 🛠️ CLI Commands
+## ️ CLI Commands
 
 ```bash
 afc init <name>              # Create new agent project
@@ -314,6 +299,7 @@ Apache License 2.0
 ---
 
 <p align="center">
-  <strong>Built for the future of AI agents</strong><br/>
+  <strong>Built with ❤️ by Vaibhav Haswani as a part of DefaultLoop Project for the future of AI agents.</strong><br/><br/>
   <em>⭐ Star this repo if you find it useful!</em>
 </p>
+
