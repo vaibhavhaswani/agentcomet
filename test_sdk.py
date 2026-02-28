@@ -4,7 +4,7 @@ from agentcomet import Agent, create_agent, load_agent
 from agentcomet.models import Ollama
 from agentcomet.tools import tool
 
-# LLM Instance — used throughout
+# LLM Instance
 llm = Ollama(model="gemma3:4b")
 
 # 1. Custom tool
@@ -15,50 +15,50 @@ def multiply(a: int, b: int) -> int:
 
 print("--- Testing ToolSpec ---")
 print("multiply tool name:", multiply.name)
-print("multiply schema:", multiply.schema)
 
-# 2. Declarative Agent via create_agent
-print("\n--- Testing declarative create_agent ---")
-agent1 = create_agent(
-    name="math-bot-declarative",
-    description="Mathematical assistant created via create_agent",
-    author="TestUser",
-    llm=llm,
-    tools=[multiply],
-    memory=True
-)
-print(agent1.run("What is 5 times 4?"))
-
-# 3. Custom Agent Class
-print("\n--- Testing Custom Agent Class ---")
+# 2. Custom Math Agent
+print("\n--- Creating Math Agent ---")
 class MyMathAgent(Agent):
     def setup(self):
-        self.name = "math-bot-custom"
-        self.description = "Mathematical assistant created via custom class"
+        self.name = "math-bot"
+        self.description = "Math assistant that remembers calculations"
         self.author = "TestUser"
-        self.use_memory(True)
         self.add_tools(multiply)
 
-    def run(self, input: str):
-        return self.chat(f"Custom prompt: {input}")
+agent = MyMathAgent(llm=llm)
 
-# LLM passed at instantiation
-agent2 = MyMathAgent(llm=llm)
-print(agent2.run("What is 6 times 7?"))
+# 3. Chat — share info and do calculations (auto-saved to memory)
+print("\n--- Chatting with agent ---")
+print(agent.run("Hi, my name is Vaibhav"))
+print(agent.run("What is 6 times 7?"))
+print(agent.run("Now multiply that result by 3"))
+print(agent.run("What is 15 times 8?"))
 
-# 4. Export to UAF
-uaf_path = "test_math_bot_custom.uaf"
+# Check stored messages
+print(f"\n--- Memory: {len(agent.memory.get('messages', []))} messages stored ---")
+
+# 4. Save state and export
+print("\n--- Save & Export ---")
+agent.save_state("after-calculations")
+
+uaf_path = "test_math_bot.uaf"
 if os.path.exists(uaf_path):
     os.remove(uaf_path)
+agent.export(uaf_path)
 
-print("\n--- Testing UAF Export ---")
-agent2.export(uaf_path)
+# 5. Load from UAF — ask about earlier calculations
+print("\n--- Load & Ask from Memory ---")
+loaded = load_agent(uaf_path)
+print(f"Restored {len(loaded.memory.get('messages', []))} messages")
 
-# 5. Load from UAF
-print("\n--- Testing UAF Load via AgentCometRuntime ---")
-loaded_agent = load_agent(uaf_path)
-print("Loaded agent type:", type(loaded_agent))
-if loaded_agent:
-    print(loaded_agent.run("Hello from loaded agent"))
+print("\nAsking loaded agent about previous session:")
+print(loaded.run("What is my name?"))
+print(loaded.run("What calculations did we do earlier?"))
+print(loaded.run("What was 6 times 7?"))
+
+# Cleanup
+os.remove(uaf_path)
+if os.path.exists(".agentcomet"):
+    shutil.rmtree(".agentcomet")
 
 print("\nDone!")

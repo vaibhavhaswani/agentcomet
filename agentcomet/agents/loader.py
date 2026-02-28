@@ -79,7 +79,21 @@ class AgentCometRuntime:
         spec.loader.exec_module(module)
         
         # entrypoint usually is agent or MyAgent
-        return getattr(module, "agent", None)
+        agent = getattr(module, "agent", None)
+        
+        # Auto-restore memory from agent.state if it exists
+        state_path = os.path.join(self.agent_dir, "agent.state")
+        if agent and os.path.exists(state_path):
+            try:
+                import json
+                with open(state_path, "r") as f:
+                    state_data = json.load(f)
+                if hasattr(agent, 'memory'):
+                    agent.memory.from_dict(state_data)
+            except Exception:
+                pass  # Silently skip if state is malformed
+        
+        return agent
 
 class GenericUAFRuntime:
     """Fallback runtime for legacy or generic UAF agents."""
@@ -96,24 +110,28 @@ class GenericUAFRuntime:
 
 def load_agent(uaf_path: str, **kwargs) -> Any:
     """
-    Routs the loading sequence based on agent.yaml definition.
-    Loads Agent SDK natively if sdk=agentcomet.
+    Routes the loading sequence based on agent.yaml definition.
+    Loads Agent SDK natively if type=agentcomet or sdk.name=agentcomet.
     """
     # 1. Parse agent.yaml from within tar
-    sdk_name = None
+    agent_type = None
     try:
         with tarfile.open(uaf_path, "r:gz") as tar:
             for member in tar.getmembers():
                 if member.name == "agent.yaml" or member.name.endswith("/agent.yaml"):
                     f = tar.extractfile(member)
                     manifest = yaml.safe_load(f)
-                    sdk_name = manifest.get("sdk", {}).get("name", "")
+                    # v1 schema: type field
+                    agent_type = manifest.get("type", "")
+                    # v2 fallback: sdk.name
+                    if not agent_type:
+                        agent_type = manifest.get("sdk", {}).get("name", "")
                     break
     except Exception as e:
         print(f"Warning: could not parse agent.yaml: {e}")
 
     # 2. Route
-    if sdk_name == "agentcomet":
+    if agent_type == "agentcomet":
         runtime = AgentCometRuntime(uaf_path)
     else:
         runtime = GenericUAFRuntime(uaf_path)

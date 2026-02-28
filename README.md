@@ -8,36 +8,39 @@
 </p>
 
 <p align="center">
-  <strong>Write your first portable AI agent in a few lines of code.</strong><br/>
-  <em>SDK-first. Tool calling. Export anywhere. No lock-in.</em>
+  <strong>Build stateful, portable AI agents in a few lines of code.</strong><br/>
+  <em>Tool calling. Built-in memory. Export anywhere. No lock-in.</em>
 </p>
 
 ---
 
 ## 🎯 What is AgentComet?
 
-AgentComet is an SDK for building AI agents that are **portable by default**. Define tools, write agent logic, and export to a single `.uaf` file you can share, version, or deploy anywhere.
+AgentComet is an SDK for building AI agents that are **stateful and portable by default**. Define tools, use key-value memory, and export to a single `.uaf` file — memory included.
 
 ```python
-from agentcomet import Agent
+from agentcomet import Agent, load_agent
 from agentcomet.models import Ollama
-from agentcomet.tools import tool
 
 llm = Ollama(model="gemma3:4b")
 
-@tool
-def multiply(a: int, b: int) -> int:
-    """Multiplies two numbers."""
-    return a * b
-
-class MathAgent(Agent):
+class MyAssistant(Agent):
     def setup(self):
-        self.name = "math-bot"
-        self.add_tools(multiply)
+        self.name = "assistant"
 
-agent = MathAgent(llm=llm)
-agent.run("What is 6 times 7?")
-agent.export("math-bot.uaf")  # That's it. Portable.
+agent = MyAssistant(llm=llm)
+
+# Chat — messages auto-saved to memory
+agent.run("Hi, I'm Vaibhav. My phone is 9876543210")
+agent.run("Remember: project deadline is March 15th")
+
+# Export — conversation auto-packed inside
+agent.export("assistant.uaf")
+
+# Later... load and ask from memory
+loaded = load_agent("assistant.uaf")
+loaded.run("What is my phone number?")   # → "9876543210"
+loaded.run("When is the deadline?")       # → "March 15th"
 ```
 
 ---
@@ -66,11 +69,52 @@ def greet(name: str) -> str:
 class GreeterAgent(Agent):
     def setup(self):
         self.name = "greeter"
-        self.use_memory(True)
         self.add_tools(greet)
 
 agent = GreeterAgent(llm=llm)
 print(agent.run("Say hello to Alice"))
+```
+
+### Memory — Built In
+
+Every agent has `self.memory` — a key-value store that auto-serializes. Store anything: strings, numbers, lists, dicts, conversation history.
+
+```python
+# Simple values
+agent.memory.save("username", "Alice")
+agent.memory.save("task_count", 5)
+
+# Conversation history
+agent.memory.save("messages", [
+    {"role": "user", "text": "What is 2+2?"},
+    {"role": "agent", "text": "The answer is 4."},
+    {"role": "user", "text": "Now multiply by 3"},
+    {"role": "agent", "text": "4 × 3 = 12."}
+])
+
+# Context and notes
+agent.memory.save("system_prompt", "You are a helpful math tutor.")
+agent.memory.save("summary", "User is learning basic arithmetic.")
+
+print(agent.memory.get("username"))    # "Alice"
+print(agent.memory.get("messages"))    # Full conversation history
+print(agent.memory.keys())            # ["username", "task_count", "messages", ...]
+```
+
+> **Note:** When you call `agent.run()`, messages are automatically appended to `memory["messages"]`. No manual saving needed.
+
+### State Persistence
+
+Save and restore memory snapshots — by auto-hash or friendly name:
+
+```python
+hash = agent.save_state()                # -> "a1b2c3d4"
+agent.save_state("before-training")       # -> "before-training"
+
+agent.show_states()                       # List all checkpoints
+agent.load_state("before-training")       # Restore by name
+agent.load_state("a1b2c3d4")             # Restore by hash
+agent.load_state()                        # Restore latest
 ```
 
 ### Export & Load
@@ -78,26 +122,25 @@ print(agent.run("Say hello to Alice"))
 ```python
 from agentcomet import load_agent
 
-# Export
-agent.export("greeter.uaf")
+# Export — conversation + memory auto-packed inside
+agent.export("assistant.uaf")
 
-# Load — anywhere, anytime
-loaded = load_agent("greeter.uaf")
-loaded.run("Say hello to Bob")
+# Load — memory auto-restored, agent remembers everything
+loaded = load_agent("assistant.uaf")
+loaded.run("What was my name again?")   # Answers from stored conversation
 ```
 
 The `.uaf` archive is a self-contained `tar.gz`:
 
 ```
-greeter.uaf
+assistant.uaf
 ├── agent.yaml         # V2 manifest (sdk: agentcomet)
 ├── agent.py           # Auto-generated runner
 ├── tools.py           # Your custom tools
+├── agent.state        # Memory (auto-serialized JSON)
 ├── requirements.txt
 └── sdk/agentcomet.json
 ```
-
-No LangChain references. No engine leakage. Just your agent.
 
 ---
 
@@ -107,11 +150,11 @@ No LangChain references. No engine leakage. Just your agent.
 |---|---|
 | **`@tool` decorator** | Auto-generates name, description, and JSON schema from type hints |
 | **Builtin tools** | `read`, `write` — ready to use out of the box |
-| **`create_agent()`** | One-liner declarative agent creation (no subclass needed) |
-| **UAF export** | `agent.export("file.uaf")` — portable agent archives |
-| **UAF load** | `load_agent("file.uaf")` — auto-routes to correct runtime |
-| **Memory** | `"full"` or sliding window (`memory=5`) |
-| **State persistence** | `save_state()` / `load_state(hash)` — versioned rollback |
+| **`create_agent()`** | One-liner declarative agent creation |
+| **`self.memory`** | Key-value memory — `save()`, `get()`, `keys()`, `clear()` |
+| **State persistence** | `save_state()` / `load_state()` — by hash or friendly name |
+| **UAF export** | `agent.export("file.uaf")` — memory auto-packed |
+| **UAF load** | `load_agent("file.uaf")` — memory auto-restored |
 | **Hot reloading** | `agent.reload()` — update logic without restart |
 
 ---
@@ -131,24 +174,28 @@ from agentcomet.models import Ollama, OpenAIChat, Gemini, Anthropic, OpenRouter,
 | **OpenRouter** | `OpenRouter(model="openai/gpt-4o")` | `OPENROUTER_API_KEY` |
 | **Perplexity** | `Perplexity()` | `PERPLEXITY_API_KEY` |
 
-All providers are passed directly to agents — no `.as_langchain()` needed.
-
 ---
 
 ## 📖 API at a Glance
 
 ```python
 # Agent lifecycle
-llm = Ollama(model="gemma3:4b")
-agent = MyAgent(llm=llm)
+agent = MyAgent(llm=Ollama(model="gemma3:4b"))
 agent.run("query")
 agent.export("agent.uaf")
 
+# Memory
+agent.memory.save("key", value)
+agent.memory.get("key")
+
+# State
+agent.save_state()                # hash
+agent.save_state("checkpoint")    # named
+agent.load_state("checkpoint")
+agent.show_states()
+
 # Load from .uaf
 agent = load_agent("agent.uaf")
-
-# Declarative shorthand
-agent = create_agent(name="bot", llm=llm, tools=[my_tool], memory=True)
 
 # Tools
 @tool
