@@ -9,10 +9,6 @@ setup(
     install_requires=[
         "uaf_compiler", 
     ],
-    entry_points={
-        "console_scripts": [
-            "afc=agentcomet.cli:main",
-        ],
-    },
+
     python_requires=">=3.8",
 )

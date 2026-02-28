@@ -68,6 +68,7 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+docs/
 
 # PyBuilder
 .pybuilder/
@@ -166,8 +167,12 @@ Desktop.ini
 
 # AgentComet specific
 .agentcomet/
+*.uaf
 *.uaf.tmp
 extracted_agents/
+dummy_agents/
+out.txt
+error.log
 
 # API keys and secrets
 .env.local
@@ -188,3 +193,4 @@ logs/
 # Test artifacts
 test_output/
 .test_cache/
+

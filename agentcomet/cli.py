@@ -3,7 +3,7 @@ import sys
 import os
 
 from .orchestrators import AgentOrchestrator, AgentOrchestrator
-from .vcs import Repository
+# from .vcs import Repository
 from .agents import UAFAgent
 
 def main():
@@ -94,5 +94,5 @@ def main():
     else:
         parser.print_help()
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

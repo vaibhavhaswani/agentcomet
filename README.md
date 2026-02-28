@@ -4,291 +4,164 @@
   <img src="https://img.shields.io/badge/AgentComet-v0.1.0-blueviolet?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.8+-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/License-Apache%202.0-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/LangGraph-Compatible-orange?style=for-the-badge" alt="LangGraph"/>
+  <img src="https://img.shields.io/badge/UAF-v2-orange?style=for-the-badge" alt="UAF v2"/>
 </p>
 
 <p align="center">
-  <strong>The First Version Control System for AI Agents</strong><br/>
-  <em>Modern orchestration. Simplified workflows. Git-like versioning for .uaf agents.</em>
+  <strong>Write your first portable AI agent in a few lines of code.</strong><br/>
+  <em>SDK-first. Tool calling. Export anywhere. No lock-in.</em>
 </p>
-
-<p align="center">
-  <a href="#-quick-start">Quick Start</a> •
-  <a href="#-features">Features</a> •
-  <a href="#-why-agentcomet">Why AgentComet?</a> •
-  <a href="#-api-reference">API</a> •
-  <a href="#-examples">Examples</a>
-</p>
-
 
 ---
 
 ## 🎯 What is AgentComet?
 
-AgentComet is **the only solution** that combines:
-
-- 🗂️ **Agent Version Control** — Git-like VCS built specifically for AI agent binaries (.uaf files)
-- 🔄 **Modern Orchestration** — Connect agents with 3 lines of code
-- 💬 **Simplified API** — Plain text in, plain text out. No message format juggling
-- 🧠 **Built-in Memory** — Conversation history with full or sliding window modes
-- ⚡ **Hot Reloading** — Update agent logic without restarting
+AgentComet is an SDK for building AI agents that are **portable by default**. Define tools, write agent logic, and export to a single `.uaf` file you can share, version, or deploy anywhere.
 
 ```python
-from agentcomet.agents import UAFAgent
+from agentcomet import Agent
+from agentcomet.models import Ollama
+from agentcomet.tools import tool
 
-agent = UAFAgent("assistant", "agent.uaf", llm=llm, memory="full")
-response = agent.invoke("What is 2 + 2?")
-print(response.content)  # "4"
+llm = Ollama(model="gemma3:4b")
+
+@tool
+def multiply(a: int, b: int) -> int:
+    """Multiplies two numbers."""
+    return a * b
+
+class MathAgent(Agent):
+    def setup(self):
+        self.name = "math-bot"
+        self.add_tools(multiply)
+
+agent = MathAgent(llm=llm)
+agent.run("What is 6 times 7?")
+agent.export("math-bot.uaf")  # That's it. Portable.
 ```
-
----
-
-## 📊 Project Stats
-
-| Metric | Value |
-|--------|-------|
-| **Supported LLM Providers** | 6+ (Ollama, OpenAI, Gemini, Anthropic, OpenRouter, Perplexity) |
-| **Workflow Patterns** | 3 (Pipeline, Fan-Out/Fan-In, Map-Reduce) |
-| **Memory Modes** | 3 (None, Full, Sliding Window) |
-| **CLI Commands** | 5 (init, build, run, vcs commit, vcs log) |
-| **Core Modules** | 6 (agents, orchestrators, workflows, vcs, models, communication) |
 
 ---
 
 ## 🚀 Quick Start
 
-### Installation
-
 ```bash
-# Install from source
 pip install -e .
-
-# Dependencies
-pip install uaf_compiler langchain-ollama
+pip install uaf_compiler pyyaml requests
 ```
 
-### Your First Agent
+### Create Your First Agent
 
 ```python
-from langchain_ollama import ChatOllama
-from agentcomet.agents import UAFAgent
+from agentcomet import Agent
+from agentcomet.models import Ollama
+from agentcomet.tools import tool
 
-# 1. Configure LLM
-llm = ChatOllama(base_url="http://localhost:11434", model="gemma3:4b")
+llm = Ollama(model="gemma3:4b")
 
-# 2. Load agent with memory
-agent = UAFAgent("my_agent", "path/to/agent.uaf", llm=llm, memory="full")
+@tool
+def greet(name: str) -> str:
+    """Greets a person by name."""
+    return f"Hello, {name}!"
 
-# 3. Chat naturally
-response = agent.invoke("Explain quantum computing in simple terms")
-print(response.content)
+class GreeterAgent(Agent):
+    def setup(self):
+        self.name = "greeter"
+        self.use_memory(True)
+        self.add_tools(greet)
 
-# 4. Follow-up (agent remembers context!)
-response = agent.invoke("Can you give an example?")
-print(response.content)
+agent = GreeterAgent(llm=llm)
+print(agent.run("Say hello to Alice"))
+```
+
+### Export & Load
+
+```python
+from agentcomet import load_agent
+
+# Export
+agent.export("greeter.uaf")
+
+# Load — anywhere, anytime
+loaded = load_agent("greeter.uaf")
+loaded.run("Say hello to Bob")
+```
+
+The `.uaf` archive is a self-contained `tar.gz`:
+
+```
+greeter.uaf
+├── agent.yaml         # V2 manifest (sdk: agentcomet)
+├── agent.py           # Auto-generated runner
+├── tools.py           # Your custom tools
+├── requirements.txt
+└── sdk/agentcomet.json
+```
+
+No LangChain references. No engine leakage. Just your agent.
+
+---
+
+## ✨ Key Features
+
+| Feature | |
+|---|---|
+| **`@tool` decorator** | Auto-generates name, description, and JSON schema from type hints |
+| **Builtin tools** | `read`, `write` — ready to use out of the box |
+| **`create_agent()`** | One-liner declarative agent creation (no subclass needed) |
+| **UAF export** | `agent.export("file.uaf")` — portable agent archives |
+| **UAF load** | `load_agent("file.uaf")` — auto-routes to correct runtime |
+| **Memory** | `"full"` or sliding window (`memory=5`) |
+| **State persistence** | `save_state()` / `load_state(hash)` — versioned rollback |
+| **Hot reloading** | `agent.reload()` — update logic without restart |
+
+---
+
+## 🔌 Supported LLM Providers
+
+```python
+from agentcomet.models import Ollama, OpenAIChat, Gemini, Anthropic, OpenRouter, Perplexity
+```
+
+| Provider | Usage | Requires |
+|---|---|---|
+| **Ollama** | `Ollama(model="gemma3:4b")` | Local Ollama server |
+| **OpenAI** | `OpenAIChat(model="gpt-4o")` | `OPENAI_API_KEY` |
+| **Gemini** | `Gemini(model="gemini-1.5-flash")` | `GOOGLE_API_KEY` |
+| **Anthropic** | `Anthropic(model="claude-3-5-sonnet")` | `ANTHROPIC_API_KEY` |
+| **OpenRouter** | `OpenRouter(model="openai/gpt-4o")` | `OPENROUTER_API_KEY` |
+| **Perplexity** | `Perplexity()` | `PERPLEXITY_API_KEY` |
+
+All providers are passed directly to agents — no `.as_langchain()` needed.
+
+---
+
+## 📖 API at a Glance
+
+```python
+# Agent lifecycle
+llm = Ollama(model="gemma3:4b")
+agent = MyAgent(llm=llm)
+agent.run("query")
+agent.export("agent.uaf")
+
+# Load from .uaf
+agent = load_agent("agent.uaf")
+
+# Declarative shorthand
+agent = create_agent(name="bot", llm=llm, tools=[my_tool], memory=True)
+
+# Tools
+@tool
+def my_func(x: int) -> int:
+    """Does something."""
+    return x * 2
 ```
 
 ---
 
-## ✨ Features
+## 🔗 Related
 
-### 🎭 Simplified Agent API
-No more wrestling with message formats. Just pass text, get text back.
-
-```python
-# Before (raw LangGraph)
-result = agent.invoke({"messages": [HumanMessage(content="Hello")]})
-output = result["messages"][-1].content
-
-# After (AgentComet)
-response = agent.invoke("Hello")
-print(response.content)
-```
-
-### 🧠 Intelligent Memory
-
-```python
-# Full memory - remembers everything
-agent = UAFAgent("chat", path, llm=llm, memory="full")
-
-# Last 5 messages only
-agent = UAFAgent("chat", path, llm=llm, memory=5)
-
-# Manage history
-agent.get_history()    # View messages
-agent.clear_memory()   # Reset conversation
-```
-
-### 🔗 Multi-Agent Orchestration
-
-```python
-from agentcomet.orchestrators import AgentOrchestrator
-
-orch = AgentOrchestrator(llm=llm)
-orch.add_agent('researcher', 'research.uaf')
-orch.add_agent('writer', 'write.uaf')
-orch.add_agent('editor', 'edit.uaf')
-
-orch.connect('researcher', 'writer')
-orch.connect('writer', 'editor')
-
-result = orch.run(initial_state)
-```
-
-### 📋 Workflow Templates
-
-```python
-from agentcomet.workflows import WorkflowTemplates
-
-# Linear pipeline
-workflow = WorkflowTemplates.pipeline({
-    'step1': 'agent1.uaf',
-    'step2': 'agent2.uaf',
-    'step3': 'agent3.uaf'
-})
-
-# Parallel fan-out/fan-in
-workflow = WorkflowTemplates.fan_out_fan_in(
-    start_agent={'dispatcher': 'dispatch.uaf'},
-    parallel_agents={'w1': 'worker.uaf', 'w2': 'worker.uaf'},
-    end_agent={'aggregator': 'aggregate.uaf'}
-)
-```
-
-### 🗂️ Agent Version Control
-
-The **first and only** VCS designed for AI agents.
-
-```bash
-# CLI
-afc vcs init
-afc vcs commit -m "Initial agent release" agent.uaf
-afc vcs log
-```
-
-```python
-# Python API
-from agentcomet.vcs import Repository
-
-repo = Repository()
-repo.init()
-repo.commit("Add reasoning agent v1.0", ["agents/reasoner.uaf"])
-repo.log()
-```
-
-### ⚡ Hot Reloading
-
-Update agents without restarting your application:
-
-```python
-agent.reload()  # Reloads from .uaf file, preserves memory
-```
-
-### 🔌 Multiple LLM Providers
-
-```python
-from agentcomet.models import (
-    Ollama,       # Local models
-    OpenAIChat,   # GPT-4, GPT-4o
-    Gemini,       # Google Gemini
-    Anthropic,    # Claude
-    OpenRouter,   # 100+ models
-    Perplexity    # Search-augmented
-)
-
-# Mix and match per agent
-orch.add_agent('analyst', 'analyze.uaf', llm=Anthropic())
-orch.add_agent('coder', 'code.uaf', llm=OpenAIChat())
-```
-
----
-
-## 🤔 Why AgentComet?
-
-| Problem | Traditional Approach | AgentComet Solution |
-|---------|---------------------|---------------------|
-| **Agent Versioning** | Manual file management | Git-like VCS with SHA-256 integrity |
-| **Message Formats** | Wrap everything in `HumanMessage` | Plain text in/out |
-| **Memory** | Build your own | Built-in `memory="full"` or `memory=N` |
-| **Multi-Agent** | Complex graph APIs | `add_agent()` + `connect()` |
-| **Hot Updates** | Restart everything | `agent.reload()` |
-| **LLM Switching** | Refactor code | Change `llm=` parameter |
-
----
-
-## 📖 API Reference
-
-### UAFAgent
-
-```python
-UAFAgent(
-    name: str,           # Agent identifier
-    uaf_path: str,       # Path to .uaf file
-    llm: Any = None,     # LLM instance
-    memory: str|int = None  # "full", N, or None
-)
-
-# Methods
-agent.invoke(text) -> AgentResponse  # Run agent
-agent.reload()                        # Hot-reload
-agent.get_history() -> List           # Get messages
-agent.clear_memory()                  # Reset history
-agent.cleanup()                       # Clean temp files
-```
-
-### AgentResponse
-
-```python
-response.content   # str - Plain text output
-response.messages  # List - Full message history  
-response.raw       # Dict - Original state dict
-```
-
-### AgentOrchestrator
-
-```python
-AgentOrchestrator(workflow=None, llm=None)
-
-orch.add_agent(name, path, llm=None)
-orch.connect(start, end)
-orch.run(initial_state) -> Dict
-```
-
-### WorkflowTemplates
-
-```python
-WorkflowTemplates.pipeline(agents_map)
-WorkflowTemplates.fan_out_fan_in(start, parallel, end)
-WorkflowTemplates.map_reduce(mapper, workers, reducer)
-```
-
-### Repository (VCS)
-
-```python
-repo = Repository(path)
-repo.init()
-repo.commit(message, files, author="Unknown")
-repo.log()
-```
-
----
-
-## ️ CLI Commands
-
-```bash
-afc init <name>              # Create new agent project
-afc build --setup file.yaml  # Compile to .uaf
-afc run agent.uaf            # Execute agent
-afc vcs init                 # Initialize repository
-afc vcs commit -m "msg" file # Commit agents
-afc vcs log                  # View history
-```
-
----
-
-## 🔗 Related Projects
-
-- **[UAF Compiler](https://github.com/vaibhavhaswani/UAF-Compiler)** — Compile agents to portable .uaf format
+- **[UAF Compiler](https://github.com/vaibhavhaswani/UAF-Compiler)** — Compile and validate `.uaf` archives
 
 ---
 
@@ -296,10 +169,13 @@ afc vcs log                  # View history
 
 Apache License 2.0
 
----
+## ⚖️ Legal & Branding
+
+- **Patent**: Indian Provisional Patent Application No. 202611013684
+- **Branding**: "AgentComet" is a trademark. See [BRANDING.md](./BRANDING.md)
+- **Attribution**: Redistribution must retain the [NOTICE](./NOTICE) file
 
 <p align="center">
-  <strong>Built with ❤️ by Vaibhav Haswani as a part of DefaultLoop Project for the future of AI agents.</strong><br/><br/>
+  <strong>Built with ❤️ by Vaibhav Haswani for the future of AI agents.</strong><br/><br/>
   <em>⭐ Star this repo if you find it useful!</em>
 </p>
-

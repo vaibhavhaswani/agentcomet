@@ -4,9 +4,16 @@ from typing import List, Dict, Optional, Any
 from .base_model import BaseLLM
 
 class Ollama(BaseLLM):
-    def __init__(self, model: str = "llama3", base_url: str = "http://localhost:11434"):
+    """
+    Ollama LLM provider with LangChain-compatible interface.
+    
+    Can be used directly with UAFAgent.
+    """
+    def __init__(self, model: str = "llama3", base_url: str = "http://localhost:11434", temperature: float = 0):
         self.model = model
         self.base_url = base_url
+        self.temperature = temperature
+        self._langchain_llm = None
 
     def generate(self, prompt: str) -> str:
         url = f"{self.base_url}/api/generate"
@@ -21,6 +28,46 @@ class Ollama(BaseLLM):
         resp = requests.post(url, json=payload)
         resp.raise_for_status()
         return resp.json().get("message", {}).get("content", "")
+    
+    def invoke(self, input_data: Any) -> Any:
+        """LangChain-compatible invoke method."""
+        # If input is a string, treat as prompt
+        if isinstance(input_data, str):
+            result = self.generate(input_data)
+            return result
+        
+        # If input is a list of messages
+        if isinstance(input_data, list):
+            # Convert LangChain message objects to dicts
+            messages = []
+            for msg in input_data:
+                if hasattr(msg, 'content') and hasattr(msg, 'type'):
+                    role = "user" if msg.type == "human" else "assistant"
+                    messages.append({"role": role, "content": msg.content})
+                elif isinstance(msg, dict):
+                    messages.append(msg)
+            return self.chat(messages)
+        
+        # If input is dict with messages key
+        if isinstance(input_data, dict) and "messages" in input_data:
+            return self.invoke(input_data["messages"])
+        
+        return self.generate(str(input_data))
+    
+    def as_langchain(self):
+        """Get a LangChain-compatible ChatOllama instance."""
+        if self._langchain_llm is None:
+            try:
+                from langchain_ollama import ChatOllama
+                self._langchain_llm = ChatOllama(
+                    base_url=self.base_url,
+                    model=self.model,
+                    temperature=self.temperature
+                )
+            except ImportError:
+                raise ImportError("langchain-ollama is required. pip install langchain-ollama")
+        return self._langchain_llm
+
 
 class OpenAIChat(BaseLLM):
     def __init__(self, model: str = "gpt-4o", api_key: Optional[str] = None):
