@@ -4,7 +4,7 @@ import os
 
 from .orchestrators import AgentOrchestrator, AgentOrchestrator
 # from .vcs import Repository
-from .agents import UAFAgent
+from .agents.loader import load_agent
 
 def main():
     parser = argparse.ArgumentParser(prog="afc", description="Agent File Commit - Agent Lifecycle Management")
@@ -69,12 +69,12 @@ def main():
 
     elif args.command == "build":
         try:
-            from uaf_compiler.builder import UAFBuilder
+            from uaf_cli.builder import UAFBuilder
             print(f"Building from {args.setup}...")
             builder = UAFBuilder(args.setup)
             builder.build()
         except ImportError:
-            print("Error: uaf_compiler not found.")
+            print("Error: uaf-cli not found.")
         except Exception as e:
             print(f"Build Error: {e}")
         
@@ -82,10 +82,7 @@ def main():
         print(f"Running {args.file}...")
         # Basic run logic for a single UAF
         try:
-            # We assume it's a UAF agent for now
-            # Need to handle workflow files differently?
-            # For this MVP, let's just instantiate UAFAgent and run with empty state
-            agent = UAFAgent("runner", args.file)
+            agent = load_agent(args.file)
             result = agent.invoke({})
             print("Result:", result)
         except Exception as e:

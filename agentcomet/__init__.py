@@ -1,4 +1,4 @@
-__version__ = "0.1.0"
+__version__ = "0.1.0b1"
 
 from .agents.agent import Agent
 from .agents.factory import create_agent

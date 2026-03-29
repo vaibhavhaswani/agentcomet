@@ -1,69 +1,68 @@
 <h1 align="center">🌠 AgentComet</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AgentComet-v0.1.0-blueviolet?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/AgentComet-v0.1.0_beta-blueviolet?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.8+-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/License-Apache%202.0-green?style=for-the-badge" alt="License"/>
   <img src="https://img.shields.io/badge/UAF-v2-orange?style=for-the-badge" alt="UAF v2"/>
 </p>
 
 <p align="center">
-  <strong>Build stateful, portable AI agents in a few lines of code.</strong><br/>
-  <em>Tool calling. Built-in memory. Export anywhere. No lock-in.</em>
+  <strong>Build once. Run anywhere. Resume anytime.</strong><br/>
+  <em>Stateful. Portable. Composable AI agents.</em>
 </p>
 
 ---
 
-## 🎯 What is AgentComet?
+## ⚡ The Problem
 
-AgentComet is an SDK for building AI agents that are **stateful and portable by default**. Define tools, use key-value memory, and export to a single `.uaf` file — memory included.
+Every AI team ends up rebuilding the same agents.
 
-```python
-from agentcomet import Agent, load_agent
-from agentcomet.models import Ollama
+Same logic. Same tools.
+Different environment. New framework.
 
-llm = Ollama(model="gemma3:4b")
+And the worst part? **All the memory, context, and progress is lost.**
+Agents today are stateless, fragile, and non-portable.
 
-class MyAssistant(Agent):
-    def setup(self):
-        self.name = "assistant"
+---
 
-agent = MyAssistant(llm=llm)
+## 🚀 Introducing AgentComet
 
-# Chat — messages auto-saved to memory
-agent.run("Hi, I'm Vaibhav. My phone is 9876543210")
-agent.run("Remember: project deadline is March 15th")
+AgentComet is a modern agent framework designed to make agents:
+- **Stateful by default**
+- **Portable across environments**
+- **Resumable at any point in time**
 
-# Export — conversation auto-packed inside
-agent.export("assistant.uaf")
+Instead of treating agents like scripts, AgentComet treats them like **artifacts**.
 
-# Later... load and ask from memory
-loaded = load_agent("assistant.uaf")
-loaded.run("What is my phone number?")   # → "9876543210"
-loaded.run("When is the deadline?")       # → "March 15th"
-```
+---
+
+## 🎯 What makes AgentComet different?
+
+AgentComet introduces a new primitive: **Portable, Stateful Agent Artifacts (`.uaf`)**
+
+You don't just write agents. You package, move, version, and resume them.
 
 ---
 
 ## 🚀 Quick Start
 
+### Installation
+
 ```bash
-pip install -e .
-pip install uaf_compiler pyyaml requests
+pip install agentcomet
 ```
 
-### Create Your First Agent
+### Build an Agent
+
+Create an agent, assign it custom tools, and let it handle the heavy lifting.
 
 ```python
-from agentcomet import Agent
+from agentcomet import Agent, tool
 from agentcomet.models import Ollama
-from agentcomet.tools import tool
-
-llm = Ollama(model="gemma3:4b")
 
 @tool
 def greet(name: str) -> str:
-    """Greets a person by name."""
     return f"Hello, {name}!"
 
 class GreeterAgent(Agent):
@@ -71,158 +70,118 @@ class GreeterAgent(Agent):
         self.name = "greeter"
         self.add_tools(greet)
 
-agent = GreeterAgent(llm=llm)
-print(agent.run("Say hello to Alice"))
+# Instantiate and chat
+agent = GreeterAgent(llm=Ollama(model="llama3"))
+print(agent.run("Say hello to Alice!"))
 ```
 
-### Memory — Built In
+---
 
-Every agent has `self.memory` — a key-value store that auto-serializes. Store anything: strings, numbers, lists, dicts, conversation history.
+## ✨ Core Capabilities
+
+### 🧠 Persistent Memory
+
+Every agent comes with a highly flexible key-value memory store (`self.memory`). Conversational history is **auto-saved** without any manual boilerplate.
 
 ```python
-# Simple values
-agent.memory.save("username", "Alice")
-agent.memory.save("task_count", 5)
-
-# Conversation history
-agent.memory.save("messages", [
-    {"role": "user", "text": "What is 2+2?"},
-    {"role": "agent", "text": "The answer is 4."},
-    {"role": "user", "text": "Now multiply by 3"},
-    {"role": "agent", "text": "4 × 3 = 12."}
-])
-
-# Context and notes
-agent.memory.save("system_prompt", "You are a helpful math tutor.")
-agent.memory.save("summary", "User is learning basic arithmetic.")
-
-print(agent.memory.get("username"))    # "Alice"
-print(agent.memory.get("messages"))    # Full conversation history
-print(agent.memory.keys())            # ["username", "task_count", "messages", ...]
+agent.memory.save("user_preferences", {"theme": "dark"})
+print(agent.memory.get("messages"))
 ```
 
-> **Note:** When you call `agent.run()`, messages are automatically appended to `memory["messages"]`. No manual saving needed.
+### 💾 State Checkpoints
 
-### State Persistence
-
-Save and restore memory snapshots — by auto-hash or friendly name:
+Save and restore exact agent timelines. Need to rollback a prompt mistake? Just load the state.
 
 ```python
-hash = agent.save_state()                # -> "a1b2c3d4"
-agent.save_state("before-training")       # -> "before-training"
-
-agent.show_states()                       # List all checkpoints
-agent.load_state("before-training")       # Restore by name
-agent.load_state("a1b2c3d4")             # Restore by hash
-agent.load_state()                        # Restore latest
+agent.save_state("checkpoint-1")
+agent.load_state("checkpoint-1")
 ```
 
-### Export & Load
+### 📦 Portable Agents with .uaf
+
+Stop writing boilerplate to serialize agent code. Export your entire agent—along with its memory, history, LLM config, and tools—into a portable `.uaf` archive.
 
 ```python
-from agentcomet import load_agent
-
-# Export — conversation + memory auto-packed inside
 agent.export("assistant.uaf")
 
-# Load — memory auto-restored, agent remembers everything
-loaded = load_agent("assistant.uaf")
-loaded.run("What was my name again?")   # Answers from stored conversation
+from agentcomet import load_agent
+agent = load_agent("assistant.uaf")
 ```
 
-The `.uaf` archive is a self-contained `tar.gz`:
+### ☁️ Local Registry (Push & Pull)
 
-```
-assistant.uaf
-├── agent.yaml         # V2 manifest (sdk: agentcomet)
-├── agent.py           # Auto-generated runner
-├── tools.py           # Your custom tools
-├── agent.state        # Memory (auto-serialized JSON)
-├── requirements.txt
-└── sdk/agentcomet.json
-```
-
----
-
-## ✨ Key Features
-
-| Feature | |
-|---|---|
-| **`@tool` decorator** | Auto-generates name, description, and JSON schema from type hints |
-| **Builtin tools** | `read`, `write` — ready to use out of the box |
-| **`create_agent()`** | One-liner declarative agent creation |
-| **`self.memory`** | Key-value memory — `save()`, `get()`, `keys()`, `clear()` |
-| **State persistence** | `save_state()` / `load_state()` — by hash or friendly name |
-| **UAF export** | `agent.export("file.uaf")` — memory auto-packed |
-| **UAF load** | `load_agent("file.uaf")` — memory auto-restored |
-| **Hot reloading** | `agent.reload()` — update logic without restart |
-
----
-
-## 🔌 Supported LLM Providers
+Sync your agents instantly with a locally hosted AgentComet hub registry using effortless `push` and `pull` commands.
 
 ```python
-from agentcomet.models import Ollama, OpenAIChat, Gemini, Anthropic, OpenRouter, Perplexity
+from agentcomet import Agent, Settings
+
+Settings.init(
+    AGENTCOMET_LOCAL_URL="http://localhost:3451",
+    AGENTCOMET_LOCAL_KEY="your-secret-key"
+)
+
+agent.push_local()
+agent = Agent.pull_local("greeter")
 ```
 
-| Provider | Usage | Requires |
-|---|---|---|
-| **Ollama** | `Ollama(model="gemma3:4b")` | Local Ollama server |
-| **OpenAI** | `OpenAIChat(model="gpt-4o")` | `OPENAI_API_KEY` |
-| **Gemini** | `Gemini(model="gemini-1.5-flash")` | `GOOGLE_API_KEY` |
-| **Anthropic** | `Anthropic(model="claude-3-5-sonnet")` | `ANTHROPIC_API_KEY` |
-| **OpenRouter** | `OpenRouter(model="openai/gpt-4o")` | `OPENROUTER_API_KEY` |
-| **Perplexity** | `Perplexity()` | `PERPLEXITY_API_KEY` |
+### 🔌 Multi-Provider LLM Support
 
----
-
-## 📖 API at a Glance
+Switching your backend is as simple as defining a new class.
 
 ```python
-# Agent lifecycle
-agent = MyAgent(llm=Ollama(model="gemma3:4b"))
-agent.run("query")
-agent.export("agent.uaf")
+from agentcomet.models import OpenAIChat, Gemini, Anthropic, Ollama
 
-# Memory
-agent.memory.save("key", value)
-agent.memory.get("key")
-
-# State
-agent.save_state()                # hash
-agent.save_state("checkpoint")    # named
-agent.load_state("checkpoint")
-agent.show_states()
-
-# Load from .uaf
-agent = load_agent("agent.uaf")
-
-# Tools
-@tool
-def my_func(x: int) -> int:
-    """Does something."""
-    return x * 2
+agent.use_llm(OpenAIChat(model="gpt-4o"))
 ```
 
 ---
 
-## 🔗 Related
+## 🧠 Why this matters
 
-- **[UAF Compiler](https://github.com/vaibhavhaswani/UAF-Compiler)** — Compile and validate `.uaf` archives
+We believe the future of AI is not just models.
+It's agents that evolve over time.
+
+Agents that:
+- Learn
+- Persist
+- Move
+- Continue
+
+AgentComet is a step toward that future.
 
 ---
 
-## 📄 License
+## 🛣️ Vision
 
-Apache License 2.0
+This is just the beginning.
 
-## ⚖️ Legal & Branding
+AgentComet is part of a larger vision to build:
+- A universal agent format
+- A global agent registry
+- A composable ecosystem of agents
 
-- **Patent**: Indian Provisional Patent Application No. 202611013684
-- **Branding**: "AgentComet" is a trademark. See [BRANDING.md](./BRANDING.md)
-- **Attribution**: Redistribution must retain the [NOTICE](./NOTICE) file
+Where agents are not rewritten, but shared, reused, and extended.
 
-<p align="center">
-  <strong>Built with ❤️ by Vaibhav Haswani for the future of AI agents.</strong><br/><br/>
-  <em>⭐ Star this repo if you find it useful!</em>
-</p>
+---
+
+## 📚 Documentation
+
+For a detailed look at all features, API methods, schemas, and configurations, check out the comprehensive [Usage Documentation](docs/usage_documentation.md).
+
+---
+
+## 🤝 Contributing
+
+- ⭐ Star the repo
+- 🛠️ Break things
+- 🚀 Open PRs
+
+All contributions are welcome.
+
+---
+
+## 📄 License & Legal
+
+- **License:** Apache License 2.0
+- **Patent:** Indian Provisional Patent Application No. 202611013684
+- **Branding:** "AgentComet" is a trademark. See [BRANDING.md](./BRANDING.md).

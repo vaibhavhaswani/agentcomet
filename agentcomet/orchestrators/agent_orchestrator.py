@@ -1,5 +1,6 @@
 from typing import Dict, Any, Optional
-from ..agents import UAFAgent, BaseAgent
+from ..agents import BaseAgent
+from ..agents.loader import load_agent
 from ..workflows import WorkflowBuilder
 from .execution_engine import ExecutionEngine
 from ..communication import MessageBroker
@@ -45,7 +46,7 @@ class AgentOrchestrator:
                     agent_config = self.workflow.agent_configs.get(name, {})
                     effective_llm = agent_config.get("llm") or self.workflow.default_llm
                     
-                    agent = UAFAgent(name, path, llm=effective_llm)
+                    agent = load_agent(path)
                     
                     # If the agent supports receiving the broker, inject it
                     # (This assumes the underlying runnable or agent object has a way to accept it)
