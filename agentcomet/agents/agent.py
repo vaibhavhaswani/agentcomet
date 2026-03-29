@@ -118,8 +118,12 @@ class Agent(BaseAgent):
                     param_parts.append(f"{pname}: {ptype}" + (f" - {pdesc}" if pdesc else ""))
                 params = ", ".join(param_parts)
             desc += f"  - {t.name}({params}): {t.description}\n"
-        desc += "\nAfter receiving a tool result, provide your final answer to the user.\n"
-        desc += "If you don't need a tool, just respond directly.\n"
+            
+        desc += "\nCRITICAL INSTRUCTIONS:\n"
+        desc += "1. ONLY use tools if the user EXPLICITLY asks you to perform an action that requires them.\n"
+        desc += "2. DO NOT use tools (like write/read files) just to remember user information. I automatically save our conversation history.\n"
+        desc += "3. If you do not need a tool, just respond directly.\n"
+        desc += "4. After receiving a tool result, provide your final answer to the user.\n"
         return desc
     
     def _parse_tool_call(self, response: str):
@@ -406,7 +410,7 @@ class Agent(BaseAgent):
 
     # ── UAF Export ──────────────────────────────────────────────────────
 
-    def export(self, path: str):
+    def export(self, path: str, version: str = "0.1.0"):
         """
         Export the Agent into a UAF format using the v2 Manifest structure.
         Memory is auto-serialized into agent.state inside the archive.
@@ -427,7 +431,7 @@ class Agent(BaseAgent):
                 "uaf_version": 2,
                 "agent": {
                     "name": self.name,
-                    "version": "0.1.0",
+                    "version": version,
                     "description": self.description,
                     "author": self.author
                 },
@@ -503,28 +507,132 @@ class Agent(BaseAgent):
                 with open(os.path.join(temp_dir, 'agent.state'), 'w') as f:
                     json.dump(self.memory.to_dict(), f)
                     
-            # --- 7. Setup Builder yaml ---
-            files_map = {
-                "agent.yaml": "agent.yaml",
-                "agent.py": "agent.py",
-                "requirements.txt": "requirements.txt",
-                "sdk/agentcomet.json": "sdk/agentcomet.json"
-            }
-            if custom_names:
-                files_map["tools.py"] = "tools.py"
-            if has_state:
-                files_map["agent.state"] = "agent.state"
+            # --- 7. Build .uaf archive directly (tar.gz) ---
+            import tarfile
+            uaf_output = os.path.join(temp_dir, "temp_agent.uaf")
             
-            with open(os.path.join(temp_dir, 'uaf_setup.yaml'), 'w') as f:
-                import yaml
-                yaml.dump({"output": "temp_agent.uaf", "files": files_map}, f)
-                    
-            # Compile using UAF Builder
-            from uaf_compiler.builder import UAFBuilder
-            builder = UAFBuilder(setup_file="uaf_setup.yaml", target_dir=temp_dir)
-            builder.build()
+            files_to_pack = [
+                "agent.yaml",
+                "agent.py",
+                "requirements.txt",
+                "sdk/agentcomet.json"
+            ]
+            if custom_names:
+                files_to_pack.append("tools.py")
+            if has_state:
+                files_to_pack.append("agent.state")
+            
+            with tarfile.open(uaf_output, "w:gz") as tar:
+                for fname in files_to_pack:
+                    fpath = os.path.join(temp_dir, fname)
+                    if os.path.exists(fpath):
+                        tar.add(fpath, arcname=fname)
             
             # Copy to destination path
-            import shutil
-            shutil.copy2(os.path.join(temp_dir, "temp_agent.uaf"), path)
+            shutil.copy2(uaf_output, path)
             print(f"Exported AgentComet agent '{self.name}' to {path}")
+
+    def push_local(self, version: str = "auto", readme: Optional[str] = None) -> dict:
+        """
+        Push the agent to a locally hosted AgentComet server.
+        """
+        import requests
+        import tempfile
+        import os
+        from agentcomet.settings import Settings
+        
+        url = Settings.get_url()
+        key = Settings.get_key()
+        
+        if not url or not key:
+            raise ValueError("AGENTCOMET_LOCAL_URL and AGENTCOMET_LOCAL_KEY must be set to push locally.")
+            
+        target_version = version
+        if version == "auto":
+            try:
+                resp = requests.get(f"{url}/api/sdk/agents/{self.name}", headers={"Authorization": f"Bearer {key}"}, timeout=10)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    current_version = data.get("version", "0.1.0")
+                    parts = current_version.split(".")
+                    if len(parts) >= 3 and parts[-1].isdigit():
+                        parts[-1] = str(int(parts[-1]) + 1)
+                        target_version = ".".join(parts)
+                    else:
+                        target_version = "0.1.1"
+                else:
+                    target_version = "0.1.0"
+            except Exception:
+                target_version = "0.1.0"
+                
+        readme_text = readme if readme is not None else self.description
+        
+        with tempfile.NamedTemporaryFile(suffix=".uaf", delete=False) as tmp:
+            tmp_path = tmp.name
+            
+        try:
+            self.export(tmp_path, version=target_version)
+            
+            with open(tmp_path, "rb") as f:
+                files = {
+                    "artifact": (f"{self.name}.uaf", f, "application/octet-stream")
+                }
+                data = {
+                    "name": self.name,
+                    "description": self.description,
+                    "version": target_version,
+                    "readme": readme_text
+                }
+                
+                push_url = f"{url}/api/sdk/agents/push"
+                headers = {"Authorization": f"Bearer {key}"}
+                
+                resp = requests.post(push_url, headers=headers, data=data, files=files, timeout=60)
+                resp.raise_for_status()
+                
+                print(f"Successfully pushed '{self.name}' v{target_version} to {url}")
+                return resp.json()
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    @classmethod
+    def pull_local(cls, agent_name: str, version: str = "latest"):
+        """
+        Pull an agent from a locally hosted AgentComet server.
+        """
+        import requests
+        import os
+        import tempfile
+        from agentcomet.settings import Settings
+        from agentcomet.agents.loader import load_agent
+        
+        url = Settings.get_url()
+        key = Settings.get_key()
+        
+        if not url or not key:
+            raise ValueError("AGENTCOMET_LOCAL_URL and AGENTCOMET_LOCAL_KEY must be set to pull locally.")
+            
+        params = {"version": version} if version and version != "latest" else None
+        
+        pull_url = f"{url}/api/sdk/agents/{agent_name}/pull"
+        headers = {"Authorization": f"Bearer {key}"}
+        
+        resp = requests.get(pull_url, headers=headers, params=params, timeout=60)
+        resp.raise_for_status()
+        
+        with tempfile.NamedTemporaryFile(suffix=".uaf", delete=False) as tmp:
+            tmp_path = tmp.name
+            
+        try:
+            with open(tmp_path, "wb") as f:
+                f.write(resp.content)
+            
+            agent = load_agent(tmp_path)
+            print(f"Successfully pulled and loaded '{agent_name}' v{version}")
+            return agent
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+

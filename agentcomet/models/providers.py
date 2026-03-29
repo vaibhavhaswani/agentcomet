@@ -5,9 +5,11 @@ from .base_model import BaseLLM
 
 class Ollama(BaseLLM):
     """
-    Ollama LLM provider with LangChain-compatible interface.
+    Ollama LLM provider — local models via Ollama.
     
-    Can be used directly with UAFAgent.
+    Usage:
+        llm = Ollama(model="gemma3:4b")
+        llm.generate("Hello")
     """
     def __init__(self, model: str = "llama3", base_url: str = "http://localhost:11434", temperature: float = 0):
         self.model = model
@@ -31,14 +33,10 @@ class Ollama(BaseLLM):
     
     def invoke(self, input_data: Any) -> Any:
         """LangChain-compatible invoke method."""
-        # If input is a string, treat as prompt
         if isinstance(input_data, str):
-            result = self.generate(input_data)
-            return result
+            return self.generate(input_data)
         
-        # If input is a list of messages
         if isinstance(input_data, list):
-            # Convert LangChain message objects to dicts
             messages = []
             for msg in input_data:
                 if hasattr(msg, 'content') and hasattr(msg, 'type'):
@@ -48,7 +46,6 @@ class Ollama(BaseLLM):
                     messages.append(msg)
             return self.chat(messages)
         
-        # If input is dict with messages key
         if isinstance(input_data, dict) and "messages" in input_data:
             return self.invoke(input_data["messages"])
         
@@ -70,69 +67,154 @@ class Ollama(BaseLLM):
 
 
 class OpenAIChat(BaseLLM):
+    """
+    OpenAI LLM provider (GPT-4o, GPT-4, GPT-3.5, etc.)
+    
+    Usage:
+        llm = OpenAIChat(model="gpt-4o", api_key="sk-...")
+        llm.generate("Hello")
+    """
     def __init__(self, model: str = "gpt-4o", api_key: Optional[str] = None):
-        try:
-            from openai import OpenAI
-        except ImportError:
-            raise ImportError("openai package is required. pip install openai")
-        
-        self.client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
         self.model = model
+        self._api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        self._client = None
+
+    def _get_client(self):
+        if self._client is None:
+            try:
+                from openai import OpenAI
+            except ImportError:
+                raise ImportError("openai package is required. Install with: pip install openai")
+            
+            if not self._api_key:
+                raise ValueError("OpenAI API key required. Pass api_key= or set OPENAI_API_KEY env variable.")
+            self._client = OpenAI(api_key=self._api_key)
+        return self._client
 
     def generate(self, prompt: str) -> str:
-        # Wrapper around chat for simple completion
         return self.chat([{"role": "user", "content": prompt}])
 
     def chat(self, messages: List[Dict[str, str]]) -> str:
-        resp = self.client.chat.completions.create(
+        client = self._get_client()
+        resp = client.chat.completions.create(
             model=self.model,
             messages=messages
         )
         return resp.choices[0].message.content
 
+
 class Gemini(BaseLLM):
-    def __init__(self, model: str = "gemini-1.5-flash", api_key: Optional[str] = None):
+    """
+    Google Gemini LLM provider.
+    
+    Supports both google-genai (new) and google-generativeai (legacy).
+    
+    Usage:
+        llm = Gemini(model="gemini-2.0-flash", api_key="AIza...")
+        llm.generate("Hello")
+    """
+    def __init__(self, model: str = "gemini-2.0-flash", api_key: Optional[str] = None):
+        self.model_name = model
+        self._api_key = api_key or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+        self._client = None
+        self._backend = None  # "new" or "legacy"
+
+    def _get_client(self):
+        if self._client is not None:
+            return self._client
+        
+        if not self._api_key:
+            raise ValueError("Gemini API key required. Pass api_key= or set GOOGLE_API_KEY env variable.")
+        
+        # Try new SDK first (google-genai)
+        try:
+            from google import genai
+            self._client = genai.Client(api_key=self._api_key)
+            self._backend = "new"
+            return self._client
+        except ImportError:
+            pass
+        
+        # Fall back to legacy SDK (google-generativeai)
         try:
             import google.generativeai as genai
+            genai.configure(api_key=self._api_key)
+            self._client = genai.GenerativeModel(self.model_name)
+            self._backend = "legacy"
+            return self._client
         except ImportError:
-            raise ImportError("google-generativeai package is required.")
+            pass
         
-        genai.configure(api_key=api_key or os.environ.get("GOOGLE_API_KEY"))
-        self.model = genai.GenerativeModel(model)
+        raise ImportError(
+            "Google AI SDK required. Install with:\n"
+            "  pip install google-genai          (recommended)\n"
+            "  pip install google-generativeai   (legacy)"
+        )
 
     def generate(self, prompt: str) -> str:
-        resp = self.model.generate_content(prompt)
-        return resp.text
+        client = self._get_client()
+        if self._backend == "new":
+            resp = client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
+            return resp.text
+        else:
+            # Legacy SDK
+            resp = client.generate_content(prompt)
+            return resp.text
 
     def chat(self, messages: List[Dict[str, str]]) -> str:
-        # Trivial mapping; Gemini has history-based chat API but simplified:
         prompt = "\n".join([f"{m['role']}: {m['content']}" for m in messages])
         return self.generate(prompt)
 
+
 class Anthropic(BaseLLM):
-    """Claude models via Anthropic API."""
-    def __init__(self, model: str = "claude-3-5-sonnet-20241022", api_key: Optional[str] = None):
-        try:
-            import anthropic
-        except ImportError:
-            raise ImportError("anthropic package is required. pip install anthropic")
-        
-        self.client = anthropic.Anthropic(api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"))
+    """
+    Anthropic Claude LLM provider.
+    
+    Usage:
+        llm = Anthropic(model="claude-sonnet-4-20250514", api_key="sk-ant-...")
+        llm.generate("Hello")
+    """
+    def __init__(self, model: str = "claude-sonnet-4-20250514", api_key: Optional[str] = None):
         self.model = model
+        self._api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        self._client = None
+
+    def _get_client(self):
+        if self._client is None:
+            try:
+                import anthropic
+            except ImportError:
+                raise ImportError("anthropic package is required. Install with: pip install anthropic")
+            
+            if not self._api_key:
+                raise ValueError("Anthropic API key required. Pass api_key= or set ANTHROPIC_API_KEY env variable.")
+            self._client = anthropic.Anthropic(api_key=self._api_key)
+        return self._client
 
     def generate(self, prompt: str) -> str:
         return self.chat([{"role": "user", "content": prompt}])
 
     def chat(self, messages: List[Dict[str, str]]) -> str:
-        resp = self.client.messages.create(
+        client = self._get_client()
+        resp = client.messages.create(
             model=self.model,
             max_tokens=4096,
             messages=messages
         )
         return resp.content[0].text
 
+
 class OpenRouter(BaseLLM):
-    """OpenRouter API - access multiple models via single API."""
+    """
+    OpenRouter API — access multiple models via single API.
+    
+    Usage:
+        llm = OpenRouter(model="openai/gpt-4o", api_key="sk-or-...")
+        llm.generate("Hello")
+    """
     def __init__(self, model: str = "openai/gpt-4o", api_key: Optional[str] = None):
         self.model = model
         self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
@@ -142,6 +224,8 @@ class OpenRouter(BaseLLM):
         return self.chat([{"role": "user", "content": prompt}])
 
     def chat(self, messages: List[Dict[str, str]]) -> str:
+        if not self.api_key:
+            raise ValueError("OpenRouter API key required. Pass api_key= or set OPENROUTER_API_KEY env variable.")
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
@@ -154,8 +238,15 @@ class OpenRouter(BaseLLM):
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
 
+
 class Perplexity(BaseLLM):
-    """Perplexity AI API."""
+    """
+    Perplexity AI API.
+    
+    Usage:
+        llm = Perplexity(model="llama-3.1-sonar-small-128k-online", api_key="pplx-...")
+        llm.generate("Hello")
+    """
     def __init__(self, model: str = "llama-3.1-sonar-small-128k-online", api_key: Optional[str] = None):
         self.model = model
         self.api_key = api_key or os.environ.get("PERPLEXITY_API_KEY")
@@ -165,6 +256,8 @@ class Perplexity(BaseLLM):
         return self.chat([{"role": "user", "content": prompt}])
 
     def chat(self, messages: List[Dict[str, str]]) -> str:
+        if not self.api_key:
+            raise ValueError("Perplexity API key required. Pass api_key= or set PERPLEXITY_API_KEY env variable.")
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
