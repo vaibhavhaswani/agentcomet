@@ -110,18 +110,49 @@ agent = load_agent("assistant.uaf")
 
 ### ☁️ Local Registry (Push & Pull)
 
-Sync your agents instantly with a locally hosted AgentComet hub registry using effortless `push` and `pull` commands.
+Sync your agents with a locally hosted AgentComet Studio registry. Version, share, and pull agents across your team — like git, but for agents.
+
+#### 1. Start AgentComet Studio
+
+```bash
+docker pull vaibhavhaswani/agentcomet-studio:latest
+
+docker run -p 3451:3451 \
+  -v $(pwd)/data:/app/data \
+  vaibhavhaswani/agentcomet-studio:latest
+```
+
+> **Windows (PowerShell):**
+> ```powershell
+> docker run -p 3451:3451 -v ${PWD}/data:/app/data vaibhavhaswani/agentcomet-studio:latest
+> ```
+
+#### 2. Configure the SDK
 
 ```python
-from agentcomet import Agent, Settings
+from agentcomet import Settings
 
 Settings.init(
     AGENTCOMET_LOCAL_URL="http://localhost:3451",
     AGENTCOMET_LOCAL_KEY="your-secret-key"
 )
+```
 
+Or set environment variables:
+```bash
+export AGENTCOMET_LOCAL_URL=http://localhost:3451
+export AGENTCOMET_LOCAL_KEY=your-secret-key
+```
+
+#### 3. Push & Pull
+
+```python
+# Push — auto-increments version
 agent.push_local()
+
+# Pull — latest or specific version
 agent = Agent.pull_local("greeter")
+agent = Agent.pull_local("greeter", version="0.1.2")
 ```
 
 ### 🔌 Multi-Provider LLM Support
