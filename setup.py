@@ -10,7 +10,7 @@ except FileNotFoundError:
 
 setup(
     name="agentcomet",
-    version="0.1.0b4",
+    version="0.1.0b5",
     description="Modern Agent Management, Version Control & Orchestration Framework",
     long_description=long_description,
     long_description_content_type="text/markdown",

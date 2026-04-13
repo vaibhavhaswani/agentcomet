@@ -2,6 +2,8 @@ import os
 import tempfile
 import json
 import hashlib
+import ast
+import warnings
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 from agentcomet.agents.base_agent import BaseAgent
@@ -128,39 +130,102 @@ class Agent(BaseAgent):
     
     def _parse_tool_call(self, response: str):
         """Parse a TOOL_CALL from the LLM response. Returns (tool_name, kwargs) or None."""
-        import re
-        # Match: TOOL_CALL: func_name(arg=val, ...)
-        pattern = r'TOOL_CALL:\s*(\w+)\(([^)]*)\)'
-        match = re.search(pattern, response)
-        if not match:
-            # Also try: ```tool_code\nfunc(args)\n```
-            pattern2 = r'```tool_code\s*\n\s*(\w+)\(([^)]*)\)\s*\n```'
-            match = re.search(pattern2, response)
-        if not match:
+        expr = self._extract_tool_call_source(response)
+        if not expr:
             return None
-        
-        func_name = match.group(1)
-        args_str = match.group(2).strip()
-        
+
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", SyntaxWarning)
+                node = ast.parse(expr, mode="eval").body
+        except Exception:
+            return None
+
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+            return None
+
         kwargs = {}
-        if args_str:
-            for part in re.split(r',\s*(?=\w+=)', args_str):
-                part = part.strip()
-                if '=' in part:
-                    key, val = part.split('=', 1)
-                    key = key.strip()
-                    val = val.strip().strip("'\"")
-                    # Try to convert to int/float
-                    try:
-                        val = int(val)
-                    except ValueError:
-                        try:
-                            val = float(val)
-                        except ValueError:
-                            pass
-                    kwargs[key] = val
-        
-        return func_name, kwargs
+        for kw in node.keywords:
+            if kw.arg is None:
+                return None
+            try:
+                kwargs[kw.arg] = ast.literal_eval(kw.value)
+            except Exception:
+                return None
+
+        return node.func.id, kwargs
+
+    def _extract_tool_call_source(self, response: str) -> Optional[str]:
+        """Extract the first tool-call expression from a strict TOOL_CALL/tool_code response."""
+        markers = ["TOOL_CALL:", "```tool_code"]
+        start = -1
+        offset = 0
+
+        for marker in markers:
+            idx = response.find(marker)
+            if idx != -1:
+                start = idx + len(marker)
+                offset = idx
+                break
+
+        if start == -1:
+            return None
+
+        if response[:offset].strip():
+            return None
+
+        text = response[start:].lstrip()
+        if not text:
+            return None
+
+        if text.startswith("```"):
+            text = text[3:].lstrip()
+        if not text or not (text[0].isalpha() or text[0] == "_"):
+            return None
+
+        depth = 0
+        quote = None
+        triple = False
+        escaped = False
+        end_index = None
+
+        for i, ch in enumerate(text):
+            if quote:
+                if escaped:
+                    escaped = False
+                    continue
+                if ch == "\\":
+                    escaped = True
+                    continue
+                if triple:
+                    if text[i:i + 3] == quote * 3:
+                        quote = None
+                        triple = False
+                    continue
+                if ch == quote:
+                    quote = None
+                continue
+
+            if text[i:i + 3] in ("'''", '"""'):
+                quote = text[i]
+                triple = True
+                continue
+            if ch in ("'", '"'):
+                quote = ch
+                triple = False
+                continue
+            if ch == "(":
+                depth += 1
+                continue
+            if ch == ")":
+                depth -= 1
+                if depth == 0:
+                    end_index = i + 1
+                    break
+
+        if end_index is None:
+            return None
+        return text[:end_index].strip()
     
     def _execute_tool(self, tool_name: str, kwargs: dict) -> str:
         """Execute a tool by name with given kwargs."""

@@ -56,6 +56,21 @@ print(loaded.run("What is my name?"))
 print(loaded.run("What calculations did we do earlier?"))
 print(loaded.run("What was 6 times 7?"))
 
+# 6. Tool-call parser regression checks
+print("\n--- Tool Call Parser ---")
+parsed = agent._parse_tool_call(
+    "TOOL_CALL: write(path='tmp/out.py', content='''print(\"hello\")\\nprint(\"world\")''')"
+)
+assert parsed is not None
+tool_name, kwargs = parsed
+assert tool_name == "write"
+assert kwargs["path"] == "tmp/out.py"
+assert kwargs["content"] == "print(\"hello\")\nprint(\"world\")"
+
+assert agent._parse_tool_call(
+    "I already wrote it.\nTOOL_CALL: write(path='tmp/out.py', content='''x''')"
+) is None
+
 # Cleanup
 os.remove(uaf_path)
 if os.path.exists(".agentcomet"):
