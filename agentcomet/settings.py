@@ -1,6 +1,8 @@
 import os
 
 class Settings:
+    AGENTCOMET_URL = None
+    AGENTCOMET_KEY = None
     AGENTCOMET_LOCAL_URL = None
     AGENTCOMET_LOCAL_KEY = None
 
@@ -13,10 +15,14 @@ class Settings:
 
     @classmethod
     def get_url(cls):
-        url = getattr(cls, 'AGENTCOMET_LOCAL_URL', None)
-        return url if url else os.environ.get("AGENTCOMET_LOCAL_URL")
+        url = getattr(cls, 'AGENTCOMET_URL', None) or os.environ.get("AGENTCOMET_URL")
+        if url: return url
+        url_local = getattr(cls, 'AGENTCOMET_LOCAL_URL', None) or os.environ.get("AGENTCOMET_LOCAL_URL")
+        return url_local
 
     @classmethod
     def get_key(cls):
-        key = getattr(cls, 'AGENTCOMET_LOCAL_KEY', None)
-        return key if key else os.environ.get("AGENTCOMET_LOCAL_KEY")
+        key = getattr(cls, 'AGENTCOMET_KEY', None) or os.environ.get("AGENTCOMET_KEY")
+        if key: return key
+        key_local = getattr(cls, 'AGENTCOMET_LOCAL_KEY', None) or os.environ.get("AGENTCOMET_LOCAL_KEY")
+        return key_local

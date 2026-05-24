@@ -597,40 +597,113 @@ class Agent(BaseAgent):
             shutil.copy2(uaf_output, path)
             print(f"Exported AgentComet agent '{self.name}' to {path}")
 
-    def push_local(self, version: str = "auto", readme: Optional[str] = None) -> dict:
+    @classmethod
+    def get_latest_version(cls, repo: str) -> Optional[str]:
         """
-        Push the agent to a locally hosted AgentComet server.
+        Query the targeted server to discover the latest version of the agent.
+        """
+        import requests
+        from urllib.parse import urlparse
+        from agentcomet.settings import Settings
+        
+        url = Settings.get_url()
+        key = Settings.get_key()
+        if not url or not key:
+            return None
+            
+        is_local = False
+        try:
+            parsed = urlparse(url)
+            hostname = parsed.hostname or ""
+            if hostname in ("localhost", "127.0.0.1") or hostname.startswith("192.168.") or hostname.startswith("10."):
+                is_local = True
+        except Exception:
+            pass
+            
+        headers = {"Authorization": f"Bearer {key}"}
+        try:
+            if is_local:
+                # Query local pull endpoint using stream=True to read only headers
+                pull_url = f"{url}/api/sdk/agents/pull"
+                resp = requests.get(pull_url, headers=headers, params={"repo": repo}, stream=True, timeout=5)
+                version = resp.headers.get("X-AgentComet-Version")
+                resp.close()
+                if version:
+                    return version
+            else:
+                # Query remote Hub metadata endpoint
+                repo_clean = repo.strip("/")
+                if "/" in repo_clean:
+                    owner, _, name = repo_clean.partition("/")
+                    metadata_url = f"{url}/api/sdk/agents/{owner}/{name}"
+                else:
+                    metadata_url = f"{url}/api/sdk/agents/{repo_clean}"
+                resp = requests.get(metadata_url, headers=headers, timeout=5)
+                if resp.ok:
+                    return resp.json().get("version")
+        except Exception:
+            pass
+        return None
+
+    def push(self, repo: str, version: str = "auto", create: bool = False, readme: str = None, local: Optional[bool] = None) -> dict:
+        """
+        Push the agent to an AgentComet repository.
         """
         import requests
         import tempfile
         import os
+        from urllib.parse import urlparse
         from agentcomet.settings import Settings
         
         url = Settings.get_url()
         key = Settings.get_key()
         
         if not url or not key:
-            raise ValueError("AGENTCOMET_LOCAL_URL and AGENTCOMET_LOCAL_KEY must be set to push locally.")
+            raise ValueError("AGENTCOMET_URL and AGENTCOMET_KEY must be set in Settings to push.")
+            
+        # Dynamically detect if we are targeting a local server or public hub
+        is_local = False
+        if url:
+            try:
+                parsed = urlparse(url)
+                hostname = parsed.hostname or ""
+                if hostname in ("localhost", "127.0.0.1") or hostname.startswith("192.168.") or hostname.startswith("10."):
+                    is_local = True
+            except Exception:
+                pass
+
+        use_local_storage = is_local if local is None else local
             
         target_version = version
         if version == "auto":
             try:
-                resp = requests.get(f"{url}/api/sdk/agents/{self.name}", headers={"Authorization": f"Bearer {key}"}, timeout=10)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    current_version = data.get("version", "0.1.0")
-                    parts = current_version.split(".")
-                    if len(parts) >= 3 and parts[-1].isdigit():
-                        parts[-1] = str(int(parts[-1]) + 1)
-                        target_version = ".".join(parts)
+                latest = self.get_latest_version(repo)
+                if latest:
+                    # Increment the version
+                    parts = latest.split(".")
+                    if len(parts) == 3:
+                        try:
+                            patch = int(parts[2])
+                            target_version = f"{parts[0]}.{parts[1]}.{patch + 1}"
+                        except ValueError:
+                            target_version = "0.1.0"
+                    elif len(parts) == 2:
+                        try:
+                            minor = int(parts[1])
+                            target_version = f"{parts[0]}.{minor + 1}.0"
+                        except ValueError:
+                            target_version = "0.1.0"
                     else:
-                        target_version = "0.1.1"
+                        target_version = "0.1.0"
                 else:
                     target_version = "0.1.0"
             except Exception:
                 target_version = "0.1.0"
                 
         readme_text = readme if readme is not None else self.description
+        
+        # Extract repo name for local file saving
+        repo_name = repo.split("/")[-1] if "/" in repo else repo
         
         with tempfile.NamedTemporaryFile(suffix=".uaf", delete=False) as tmp:
             tmp_path = tmp.name
@@ -640,35 +713,42 @@ class Agent(BaseAgent):
             
             with open(tmp_path, "rb") as f:
                 files = {
-                    "artifact": (f"{self.name}.uaf", f, "application/octet-stream")
+                    "artifact": (f"{repo_name}.uaf", f, "application/octet-stream")
                 }
                 data = {
-                    "name": self.name,
+                    "repo": repo,
+                    "repoPath": repo,
+                    "repoName": repo_name,
+                    "name": repo_name,
                     "description": self.description,
                     "version": target_version,
-                    "readme": readme_text
+                    "readme": readme_text,
+                    "create": "true" if create else "false",
+                    "local": "true" if use_local_storage else "false"
                 }
                 
                 push_url = f"{url}/api/sdk/agents/push"
                 headers = {"Authorization": f"Bearer {key}"}
                 
                 resp = requests.post(push_url, headers=headers, data=data, files=files, timeout=60)
-                resp.raise_for_status()
+                if not resp.ok:
+                    raise RuntimeError(f"Hub push failed with HTTP {resp.status_code}: {resp.text}")
                 
-                print(f"Successfully pushed '{self.name}' v{target_version} to {url}")
+                print(f"Successfully pushed '{repo}' to {url}")
                 return resp.json()
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
     @classmethod
-    def pull_local(cls, agent_name: str, version: str = "latest"):
+    def pull(cls, repo: str, version: str = "latest"):
         """
-        Pull an agent from a locally hosted AgentComet server.
+        Pull an agent from an AgentComet repository.
         """
         import requests
         import os
         import tempfile
+        from urllib.parse import urlparse
         from agentcomet.settings import Settings
         from agentcomet.agents.loader import load_agent
         
@@ -676,15 +756,40 @@ class Agent(BaseAgent):
         key = Settings.get_key()
         
         if not url or not key:
-            raise ValueError("AGENTCOMET_LOCAL_URL and AGENTCOMET_LOCAL_KEY must be set to pull locally.")
+            raise ValueError("AGENTCOMET_URL and AGENTCOMET_KEY must be set in Settings to pull.")
             
-        params = {"version": version} if version and version != "latest" else None
-        
-        pull_url = f"{url}/api/sdk/agents/{agent_name}/pull"
+        # Dynamically detect if we are targeting a local server or public hub
+        is_local = False
+        if url:
+            try:
+                parsed = urlparse(url)
+                hostname = parsed.hostname or ""
+                if hostname in ("localhost", "127.0.0.1") or hostname.startswith("192.168.") or hostname.startswith("10."):
+                    is_local = True
+            except Exception:
+                pass
+
         headers = {"Authorization": f"Bearer {key}"}
+        params = {}
+        if version and version != "latest":
+            params["version"] = version
+
+        if is_local:
+            # Local Studio pull route: GET /api/sdk/agents/pull?repo=repo
+            pull_url = f"{url}/api/sdk/agents/pull"
+            params["repo"] = repo
+        else:
+            # Remote Hub pull route: /api/sdk/agents/[repo]/pull or /api/sdk/agents/[repo]/[name]/pull
+            repo_clean = repo.strip("/")
+            if "/" in repo_clean:
+                owner, _, name = repo_clean.partition("/")
+                pull_url = f"{url}/api/sdk/agents/{owner}/{name}/pull"
+            else:
+                pull_url = f"{url}/api/sdk/agents/{repo_clean}/pull"
         
         resp = requests.get(pull_url, headers=headers, params=params, timeout=60)
-        resp.raise_for_status()
+        if not resp.ok:
+            raise RuntimeError(f"Hub pull failed with HTTP {resp.status_code}: {resp.text}")
         
         with tempfile.NamedTemporaryFile(suffix=".uaf", delete=False) as tmp:
             tmp_path = tmp.name
@@ -694,10 +799,8 @@ class Agent(BaseAgent):
                 f.write(resp.content)
             
             agent = load_agent(tmp_path)
-            print(f"Successfully pulled and loaded '{agent_name}' v{version}")
+            print(f"Successfully pulled and loaded '{repo}'")
             return agent
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
-
-

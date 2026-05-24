@@ -1,7 +1,7 @@
 <h1 align="center">🌠 AgentComet</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AgentComet-v0.1.0_beta-blueviolet?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/AgentComet-v0.5.0-blueviolet?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/Python-3.8+-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/License-Apache%202.0-green?style=for-the-badge" alt="License"/>
   <img src="https://img.shields.io/badge/UAF-v2-orange?style=for-the-badge" alt="UAF v2"/>
@@ -10,6 +10,10 @@
 <p align="center">
   <strong>Build once. Run anywhere. Resume anytime.</strong><br/>
   <em>Stateful. Portable. Composable AI agents.</em>
+</p>
+
+<p align="center">
+  <strong>Official Website:</strong> <a href="https://ac.defaultloop.com">ac.defaultloop.com</a>
 </p>
 
 ---
@@ -108,12 +112,15 @@ from agentcomet import load_agent
 agent = load_agent("assistant.uaf")
 ```
 
-### ☁️ Local Registry (Push & Pull)
+### ☁️ Registry & Hub (Push & Pull)
 
-Sync your agents with a locally hosted AgentComet Studio registry. Version, share, and pull agents across your team — like git, but for agents.
+Sync your agents with either a locally hosted **AgentComet Studio** registry or the public cloud registry **[AgentComet Hub](https://ac.defaultloop.com)**.
 
-#### 1. Start AgentComet Studio
+#### 🏢 1. AgentComet Studio (Local Registry)
 
+Sync your agents locally across your team.
+
+##### A. Start AgentComet Studio
 ```bash
 docker pull vaibhavhaswani/agentcomet-studio:latest
 
@@ -127,32 +134,45 @@ docker run -p 3451:3451 \
 > docker run -p 3451:3451 -v ${PWD}/data:/app/data vaibhavhaswani/agentcomet-studio:latest
 > ```
 
-#### 2. Configure the SDK
-
+##### B. Configure and Push/Pull
 ```python
-from agentcomet import Settings
+from agentcomet import Settings, Agent
 
+# Configure SDK
 Settings.init(
-    AGENTCOMET_LOCAL_URL="http://localhost:3451",
-    AGENTCOMET_LOCAL_KEY="your-secret-key"
+    AGENTCOMET_URL="http://localhost:3451",
+    AGENTCOMET_KEY="your-local-key"
+)
+
+# Push — auto-increments version
+agent.push(repo="assistant")
+
+# Pull — latest or specific version
+agent = Agent.pull(repo="assistant", version="latest")
+```
+
+#### 🌌 2. AgentComet Hub (Cloud Registry)
+
+Publish and distribute your agents on the official public registry at **[ac.defaultloop.com](https://ac.defaultloop.com)**.
+
+##### A. Configure the SDK
+```python
+from agentcomet import Settings, Agent
+
+# Configure SDK to target the cloud registry
+Settings.init(
+    AGENTCOMET_URL="https://ac.defaultloop.com",
+    AGENTCOMET_KEY="your-hub-api-token"
 )
 ```
 
-Or set environment variables:
-```bash
-export AGENTCOMET_LOCAL_URL=http://localhost:3451
-export AGENTCOMET_LOCAL_KEY=your-secret-key
-```
-
-#### 3. Push & Pull
-
+##### B. Push & Pull
 ```python
-# Push — auto-increments version
-agent.push_local()
+# Push to the cloud registry — auto-increments version and creates if it doesn't exist
+agent.push(repo="username/assistant", create=True)
 
-# Pull — latest or specific version
-agent = Agent.pull_local("greeter")
-agent = Agent.pull_local("greeter", version="0.1.2")
+# Pull from the cloud registry
+agent = Agent.pull(repo="username/assistant", version="latest")
 ```
 
 ### 🔌 Multi-Provider LLM Support
@@ -195,9 +215,10 @@ Where agents are not rewritten, but shared, reused, and extended.
 
 ---
 
-## 📚 Documentation
+## 📚 Documentation & Website
 
-For a detailed look at all features, API methods, schemas, and configurations, check out the comprehensive [Usage Documentation](docs/usage_documentation.md).
+- **Official Website:** [https://ac.defaultloop.com](https://ac.defaultloop.com)
+- **Comprehensive Docs:** Refer to the detailed [Usage Documentation](docs/usage_documentation.md) for full API schemas, setup guides, and config settings.
 
 ---
 
