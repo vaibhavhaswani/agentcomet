@@ -1,6 +1,6 @@
 # AgentComet SDK Documentation
 
-AgentComet is a modern framework for building, persisting, and orchestrating intelligent agents with built-in version control and state management.
+AgentComet is a modern framework for building and persisting intelligent agents with robust state management.
 
 ---
 

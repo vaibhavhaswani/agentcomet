@@ -6,12 +6,12 @@ try:
     with open("README.md", "r", encoding="utf-8") as fh:
         long_description = fh.read()
 except FileNotFoundError:
-    long_description = "Modern Agent Management, Version Control & Orchestration Framework"
+    long_description = "Modern Agent Management & State Persistence Framework"
 
 setup(
     name="agentcomet",
     version="0.5.0",
-    description="Modern Agent Management, Version Control & Orchestration Framework",
+    description="Modern Agent Management & State Persistence Framework",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Vaibhav Haswani",

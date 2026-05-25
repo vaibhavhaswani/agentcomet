@@ -35,6 +35,7 @@ class Agent(BaseAgent):
         self.memory = Memory()
         self.registry = ToolRegistry()
         self._states_index = {}  # name -> hash mapping
+        self.max_rounds = 10     # Maximum tool loop execution rounds
         
         # Pull in default builtins
         for tool_name, tool_spec in default_registry.builtin_tools.items():
@@ -276,9 +277,9 @@ class Agent(BaseAgent):
                 prompt_parts.append(f"User: {input}")
                 prompt = "\n".join(prompt_parts)
                 
-                # Tool-calling loop (up to 3 rounds)
+                # Tool-calling loop (up to 10 rounds)
                 final_response = ""
-                for _ in range(3):
+                for _ in range(10):
                     response = self._llm_instance.generate(prompt)
                     
                     tool_call = self._parse_tool_call(response)
@@ -475,7 +476,7 @@ class Agent(BaseAgent):
 
     # ── UAF Export ──────────────────────────────────────────────────────
 
-    def export(self, path: str, version: str = "0.1.0"):
+    def export(self, path: str, version: str = "0.1.0", dependencies: Optional[List[str]] = None):
         """
         Export the Agent into a UAF format using the v2 Manifest structure.
         Memory is auto-serialized into agent.state inside the archive.
@@ -566,6 +567,9 @@ class Agent(BaseAgent):
             # --- 5. requirements.txt ---
             with open(os.path.join(temp_dir, 'requirements.txt'), 'w') as f:
                 f.write("agentcomet\n")
+                if dependencies:
+                    for dep in dependencies:
+                        f.write(f"{dep}\n")
                 
             # --- 6. agent.state (auto-serialized from self.memory) ---
             if has_state:
@@ -645,7 +649,7 @@ class Agent(BaseAgent):
             pass
         return None
 
-    def push(self, repo: str, version: str = "auto", create: bool = False, readme: str = None, local: Optional[bool] = None) -> dict:
+    def push(self, repo: str, version: str = "auto", create: bool = False, readme: str = None, local: Optional[bool] = None, dependencies: Optional[List[str]] = None) -> dict:
         """
         Push the agent to an AgentComet repository.
         """
@@ -709,7 +713,7 @@ class Agent(BaseAgent):
             tmp_path = tmp.name
             
         try:
-            self.export(tmp_path, version=target_version)
+            self.export(tmp_path, version=target_version, dependencies=dependencies)
             
             with open(tmp_path, "rb") as f:
                 files = {
